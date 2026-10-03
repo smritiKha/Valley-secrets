@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Valley Secrets - Tri-City Hidden Gems</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        :root { color-scheme: light; }
+        body { background: #f7f8f5; }
+        .site-header { background: rgba(255,255,255,.92); border-color: #e7e9e2; backdrop-filter: blur(16px); }
+        .brand-mark { background: linear-gradient(145deg,#345743,#1d382a); box-shadow: 0 8px 18px #25463124; }
+        .hero-panel { background: radial-gradient(ellipse at 83% 16%,#52745b 0,transparent 38%),linear-gradient(115deg,#183629 0%,#254735 58%,#365c43 100%); }
+        .hero-panel:after { content:""; position:absolute; inset:0; pointer-events:none; opacity:.17; background-image:radial-gradient(#ffffff 0.6px,transparent 0.6px); background-size:16px 16px; mask-image:linear-gradient(90deg,transparent,#000); }
+        .city-filter-btn { transition:all .18s ease; }
+        .city-filter-btn.is-active { color:#fff; background:#294b36; box-shadow:0 3px 8px #19372722; }
+        .place-card { transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease; }
+        .place-card:hover { transform:translateY(-4px); box-shadow:0 18px 36px #1c322012; border-color:#bdcbbb; }
+        .place-card.is-selected { border-color:#63846a; box-shadow:0 0 0 2px #63846a22,0 12px 30px #1c322012; }
+        .place-card:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible { outline:3px solid #91ad83; outline-offset:2px; }
+        .search-control,.sort-control { border:1px solid #e3e7df; background:#fff; transition:border-color .18s ease,box-shadow .18s ease; }
+        .search-control:focus,.sort-control:focus { border-color:#63846a; box-shadow:0 0 0 4px #63846a18; outline:none; }
+        .side-panel { box-shadow:0 18px 50px #263c2b0a; }
+        .place-detail-backdrop { display:none; }
+        @media (max-width: 1023px) {
+            .place-detail-backdrop.is-visible { display:block; position:fixed; inset:0; z-index:59; background:rgba(18,35,25,.48); backdrop-filter:blur(3px); }
+            .place-detail-sheet.mobile-open { position:fixed; z-index:60; inset-inline:0; bottom:0; max-height:min(86dvh,760px); overflow-y:auto; overscroll-behavior:contain; border:1px solid #e7e9e2; border-bottom:0; border-radius:1.5rem 1.5rem 0 0; background:#fff; padding:1.25rem max(1rem,env(safe-area-inset-right)) calc(1.25rem + env(safe-area-inset-bottom)) max(1rem,env(safe-area-inset-left)); box-shadow:0 -16px 60px #14251d33; }
+        }
+        #places-map { overflow:hidden; }
+        @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior:auto!important; transition:none!important; animation:none!important; } }
+    </style>
+</head>
+<body class="text-slate-800 font-sans">
+
+    <!-- Top Navigation Bar -->
+    <header class="site-header border-b py-3 px-4 sm:px-6 sticky top-0 z-50 flex justify-between items-center">
+        <a href="#" class="flex items-center gap-3 no-underline" aria-label="Valley Secrets home">
+            <span class="brand-mark flex h-10 w-10 items-center justify-center rounded-xl text-lg font-bold text-white">V</span>
+            <span><span class="block text-base font-bold tracking-tight text-slate-900">Valley Secrets</span><span class="block text-[10px] font-semibold uppercase tracking-[.18em] text-slate-500">Kathmandu Valley guide</span></span>
+        </a>
+        <div class="flex gap-2">
+            <span id="visitor-account-label" class="hidden self-center max-w-36 truncate text-xs font-medium text-slate-600 sm:max-w-none"></span>
+            <button onclick="openVisitorAuthModal()" id="visitor-login-nav-btn" class="rounded-full bg-[#294b36] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#203d2b] cursor-pointer">Sign in</button>
+            <button onclick="logoutVisitor()" id="visitor-logout-nav-btn" class="hidden rounded-full bg-slate-100 px-3 py-2.5 text-xs font-semibold text-slate-700 cursor-pointer">Sign out</button>
+        </div>
+    </header>
+
+    <main class="mx-auto max-w-7xl px-4 pb-12 pt-6 sm:px-6 sm:pt-8">
+        <section class="hero-panel relative isolate overflow-hidden rounded-[1.75rem] px-6 py-9 text-white shadow-lg sm:px-10 sm:py-12">
+            <div class="relative z-10 max-w-2xl">
+                <p class="mb-3 text-xs font-semibold uppercase tracking-[.22em] text-emerald-100">Three cities · countless stories</p>
+                <h2 class="max-w-xl text-3xl font-semibold leading-tight tracking-tight sm:text-5xl">Find the places that make the valley unforgettable.</h2>
+                <p class="mt-4 max-w-xl text-sm leading-6 text-emerald-50/85 sm:text-base">Thoughtful local discoveries, real visitor stories, and a map to take you there.</p>
+                <div class="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3 text-xs font-medium text-emerald-50/90">
+                    <span><strong id="hero-place-count" class="mr-1 text-base text-white">—</strong> curated places</span>
+                    <span><strong id="hero-city-count" class="mr-1 text-base text-white">3</strong> cities to explore</span>
+                    <span><strong id="hero-review-count" class="mr-1 text-base text-white">—</strong> community stories</span>
+                </div>
+            </div>
+            <div class="pointer-events-none absolute -right-10 -top-16 h-80 w-80 rounded-full border border-white/10 sm:right-10 sm:top-1/2 sm:-translate-y-1/2">
+                <div class="absolute inset-8 rounded-full border border-white/10"></div>
+                <div class="absolute inset-16 rounded-full border border-white/10"></div>
+                <div class="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-300 shadow-[0_0_35px_14px_rgba(252,211,77,.28)]"></div>
+            </div>
+        </section>
+
+    <div class="mt-8 grid grid-cols-1 items-start gap-7 lg:grid-cols-3">
+        <!-- Explorer Main Grid -->
+        <div class="space-y-5 lg:col-span-2">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div><p class="mb-1 text-xs font-semibold uppercase tracking-[.18em] text-[#62806a]">The local edit</p><h2 class="text-2xl font-semibold tracking-tight text-slate-900">Explore the valley</h2></div>
+                <!-- City Filters -->
+                <div class="flex w-fit gap-1 rounded-full border border-[#e5e9e1] bg-white p-1 shadow-sm" role="group" aria-label="Filter places by city">
+                    <button onclick="filterCity('all', this)" aria-pressed="true" class="city-filter-btn is-active rounded-full px-3.5 py-2 text-xs font-semibold text-slate-600 cursor-pointer">All</button>
+                    <button onclick="filterCity('Kathmandu', this)" aria-pressed="false" class="city-filter-btn rounded-full px-3.5 py-2 text-xs font-semibold text-slate-600 cursor-pointer">Kathmandu</button>
+                    <button onclick="filterCity('Lalitpur', this)" aria-pressed="false" class="city-filter-btn rounded-full px-3.5 py-2 text-xs font-semibold text-slate-600 cursor-pointer">Lalitpur</button>
+                    <button onclick="filterCity('Bhaktapur', this)" aria-pressed="false" class="city-filter-btn rounded-full px-3.5 py-2 text-xs font-semibold text-slate-600 cursor-pointer">Bhaktapur</button>
+                </div>
+            </div>
+            <div class="flex flex-col gap-3 sm:flex-row">
+                <label class="relative block flex-1">
+                    <span class="sr-only">Search places</span><span aria-hidden="true" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
+                    <input id="place-search" type="search" oninput="setPlaceSearch(this.value)" placeholder="Search places, neighborhoods, stories…" class="search-control w-full rounded-xl py-3 pl-10 pr-4 text-sm text-slate-800" autocomplete="off">
+                </label>
+                <label class="sr-only" for="place-sort">Sort places</label>
+                <select id="place-sort" onchange="setPlaceSort(this.value)" class="sort-control rounded-xl px-3.5 py-3 text-sm text-slate-700">
+                    <option value="featured">Sort: Featured</option>
+                    <option value="name">Name: A to Z</option>
+                    <option value="rating">Top rated</option>
+                </select>
+                <button id="favorites-filter" type="button" onclick="toggleFavoritesFilter()" aria-pressed="false" class="rounded-xl border border-[#e5e9e1] bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-[#adc1ad] cursor-pointer">♡ Saved <span id="favorites-count">0</span></button>
+            </div>
+            <p id="favorites-sync-status" class="min-h-4 px-1 text-xs text-slate-500" role="status" aria-live="polite"></p>
+            <div id="places-status" class="hidden rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800" role="alert">
+                <div class="flex flex-wrap items-center justify-between gap-3"><p id="places-status-message">Places could not be loaded.</p><button type="button" onclick="loadPlaces()" class="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-rose-800 shadow-sm hover:bg-rose-100 cursor-pointer">Try again</button></div>
+            </div>
+            <div class="flex items-center justify-between px-1 text-xs text-slate-500"><p id="results-summary" aria-live="polite">Finding special places…</p><button id="clear-search" type="button" onclick="clearPlaceSearch()" class="hidden font-semibold text-[#45634b] underline cursor-pointer">Clear filters</button></div>
+            <div id="places-container" class="grid grid-cols-1 gap-5 sm:grid-cols-2"></div>
+            <section class="rounded-2xl border border-[#e7e9e2] bg-white p-4 shadow-sm sm:p-5">
+                <div class="mb-3 flex flex-wrap items-end justify-between gap-2"><div><p class="mb-1 text-[10px] font-semibold uppercase tracking-[.18em] text-[#62806a]">Plan your route</p><h3 class="text-lg font-semibold text-slate-900">Explore on the map</h3></div><a href="https://www.openstreetmap.org/" target="_blank" rel="noopener noreferrer" class="text-xs font-medium text-slate-500 hover:text-[#345743]">Map data © OpenStreetMap</a></div>
+                <p id="map-status" class="mb-3 text-xs text-slate-500">Loading map…</p>
+                <div id="places-map" class="z-0 h-80 w-full rounded-xl sm:h-96" aria-label="Interactive map of hidden gems"></div>
+            </section>
+        </div>
+
+        <!-- Dynamic Action Sidebar Panel -->
+        <div class="side-panel rounded-2xl border border-[#e7e9e2] bg-white p-5 sm:p-6 lg:sticky lg:top-24">
+            
+            <!-- User Interaction Module -->
+            <div id="user-interaction-panel">
+                <div id="active-place-details" class="place-detail-sheet hidden space-y-4">
+                    <div class="flex items-start justify-between gap-3">
+                        <div><p class="mb-1 text-[10px] font-semibold uppercase tracking-[.16em] text-[#62806a]">Place details</p><h4 id="selected-place-title" class="font-bold text-slate-900 text-lg"></h4></div>
+                        <button id="close-place-details" type="button" onclick="closePlaceDetails()" class="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-lg text-slate-600 hover:bg-slate-200 cursor-pointer" aria-label="Close place details">×</button>
+                    </div>
+                    <div class="flex items-center justify-between gap-2">
+                        <p id="place-review-context" class="text-xs text-slate-500"></p>
+                        <span id="place-detail-rating" class="shrink-0 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700"></span>
+                    </div>
+                    <figure id="place-detail-photo-container" class="hidden overflow-hidden rounded-xl bg-[#edf0ea]">
+                        <img id="place-detail-photo" class="max-h-56 w-full object-cover" alt="">
+                        <figcaption id="place-detail-photo-credit" class="px-3 py-2 text-[10px] text-slate-500"></figcaption>
+                    </figure>
+                    <p id="place-selected-description" class="text-sm leading-6 text-slate-600"></p>
+                    <div id="place-detail-actions" class="flex flex-wrap gap-2"></div>
+                    <p id="place-share-status" class="hidden break-all text-xs text-slate-500" role="status" aria-live="polite"></p>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Rate this place:</label>
+                        <div class="flex gap-1" id="rating-stars-input" role="group" aria-label="Choose a rating from one to five stars">
+                            <button type="button" onclick="selectRating(1)" aria-label="1 star" aria-pressed="false" class="text-2xl text-slate-300 hover:text-amber-400 cursor-pointer">★</button>
+                            <button type="button" onclick="selectRating(2)" aria-label="2 stars" aria-pressed="false" class="text-2xl text-slate-300 hover:text-amber-400 cursor-pointer">★</button>
+                            <button type="button" onclick="selectRating(3)" aria-label="3 stars" aria-pressed="false" class="text-2xl text-slate-300 hover:text-amber-400 cursor-pointer">★</button>
+                            <button type="button" onclick="selectRating(4)" aria-label="4 stars" aria-pressed="false" class="text-2xl text-slate-300 hover:text-amber-400 cursor-pointer">★</button>
+                            <button type="button" onclick="selectRating(5)" aria-label="5 stars" aria-pressed="false" class="text-2xl text-slate-300 hover:text-amber-400 cursor-pointer">★</button>
+                        </div>
+                        <p id="rating-status" class="mt-1 text-xs text-slate-500" role="status" aria-live="polite">Choose a rating to save it or include it with your review.</p>
+                        <button id="rating-submit" type="button" onclick="submitRating()" disabled class="mt-2 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-white enabled:cursor-pointer enabled:hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50">Save rating</button>
+                    </div>
+
+                    <form id="review-form" onsubmit="submitReview(event)" class="scroll-mt-4 space-y-2 rounded-xl border border-[#e7e9e2] bg-[#fbfcfa] p-4">
+                        <h5 id="review-form-title" class="text-xs font-bold text-slate-500 uppercase"></h5>
+                        <p id="review-account-email" class="hidden text-xs text-slate-500"></p>
+                        <p id="review-rating-note" class="text-xs text-slate-500">Your selected star rating will be included with this review.</p>
+                        <div id="reviewer-name-field">
+                            <label for="reviewer-name" class="block text-xs font-semibold text-slate-600 mb-1">Your name</label>
+                            <input id="reviewer-name" name="name" type="text" maxlength="80" autocomplete="name" required class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-indigo-500" placeholder="Name">
+                        </div>
+                        <div>
+                            <label for="review-text" class="block text-xs font-semibold text-slate-600 mb-1">Your review</label>
+                            <textarea id="review-text" name="comment" rows="3" maxlength="1500" required class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-indigo-500" placeholder="Share your experience..."></textarea>
+                        </div>
+                        <div>
+                            <label for="review-photo" class="block text-xs font-semibold text-slate-600 mb-1">Photo (optional)</label>
+                            <input id="review-photo" name="photo" type="file" accept="image/jpeg,image/png" class="w-full text-xs text-slate-600 file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold">
+                            <p class="mt-1 text-xs text-slate-400">JPEG or PNG, up to 5 MB.</p>
+                        </div>
+                        <button id="review-submit" type="submit" class="w-full bg-slate-900 text-white py-2 rounded-lg text-xs font-bold cursor-pointer">Save Review</button>
+                        <p id="review-form-status" class="hidden text-xs" role="status" aria-live="polite"></p>
+                    </form>
+                    <div id="review-auth-required" class="rounded-xl border border-[#e7e9e2] bg-[#fbfcfa] p-4">
+                        <p class="text-sm font-semibold text-slate-800">Sign in to write a review</p>
+                        <p class="mt-1 text-xs leading-5 text-slate-500">Create an account or sign in with your email to save reviews and sync saved places.</p>
+                        <button type="button" onclick="focusPlaceReviewForm()" class="mt-3 rounded-lg bg-[#294b36] px-3 py-2 text-xs font-semibold text-white hover:bg-[#203d2b] cursor-pointer">Sign in or create account</button>
+                    </div>
+
+                    <section class="border-t border-slate-100 pt-4" aria-labelledby="place-reviews-title">
+                        <div class="mb-3 flex items-center justify-between gap-2">
+                            <h5 id="place-reviews-title" class="text-xs font-bold uppercase tracking-wide text-slate-600">Visitor reviews</h5>
+                            <span id="place-reviews-count" class="text-[10px] text-slate-400"></span>
+                        </div>
+                        <div id="place-reviews-feed" class="space-y-3 max-h-80 overflow-y-auto pr-1" aria-live="polite">
+                            <p class="text-xs text-slate-400 italic">Choose a place to read its reviews.</p>
+                        </div>
+                    </section>
+
+                </div>
+                <section id="community-voices-section" class="border-t border-slate-100 pt-4" aria-labelledby="community-voices-title">
+                    <div class="mb-2 flex items-center justify-between gap-2"><div><p class="mb-1 text-[10px] font-semibold uppercase tracking-[.18em] text-[#62806a]">From the community</p><h3 id="community-voices-title" class="text-xl font-semibold tracking-tight text-slate-900">Community voices</h3></div><span class="rounded-full bg-[#f1f5ef] px-2.5 py-1 text-[10px] font-semibold text-[#45634b]">LIVE</span></div>
+                    <p class="mb-4 text-xs leading-5 text-slate-500">Local notes, honest ratings, and little moments worth sharing.</p>
+                    <div id="community-reviews-feed" class="space-y-3 max-h-96 overflow-y-auto pr-1" aria-live="polite">
+                        <p class="text-xs text-slate-400 italic">Loading community reviews...</p>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Secured Admin Management Module -->
+            <div id="admin-management-panel" class="hidden">
+                <h3 id="admin-panel-title" class="text-lg font-bold text-slate-900 mb-4">Add New Place</h3>
+                <form id="place-form" onsubmit="savePlace(event)" class="space-y-3">
+                    <input type="hidden" id="edit-place-id">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Place Name</label>
+                        <input type="text" id="form-name" required class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">City</label>
+                        <select id="form-city" class="w-full border border-slate-200 rounded-lg p-2 text-sm bg-white focus:outline-indigo-500">
+                            <option value="Kathmandu">Kathmandu</option>
+                            <option value="Lalitpur">Lalitpur</option>
+                            <option value="Bhaktapur">Bhaktapur</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Photo URL</label>
+                        <input type="url" id="form-photo" class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Photo credit</label>
+                        <input type="text" id="form-photo-credit" maxlength="200" class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-indigo-500" placeholder="Photographer · license">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Photo source URL</label>
+                        <input type="url" id="form-photo-source" class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-indigo-500" placeholder="https://commons.wikimedia.org/wiki/File:…">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Google Maps URL (include coordinates)</label>
+                        <input type="url" id="form-map-url" class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-indigo-500" placeholder="https://www.google.com/maps/place/.../@27.7,85.3,15z">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Description / Write-up</label>
+                        <textarea id="form-desc" rows="4" required class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-indigo-500" placeholder="Write something architectural, cultural, or interesting about this location..."></textarea>
+                    </div>
+                    <div class="flex gap-2 pt-2">
+                        <button type="button" onclick="cancelAdminEdit()" class="w-1/2 bg-slate-100 text-slate-700 py-2 rounded-lg text-sm font-semibold cursor-pointer">Cancel</button>
+                        <button type="submit" class="w-1/2 bg-indigo-600 text-white py-2 rounded-lg text-sm font-semibold cursor-pointer">Save Place</button>
+                    </div>
+                    <p id="place-form-status" class="hidden text-xs" role="status" aria-live="polite"></p>
+                </form>
+            </div>
+        </div>
+    </div>
+    </main>
+
+    <footer class="mx-auto mt-8 flex max-w-7xl items-center justify-end gap-3 border-t border-[#e7e9e2] px-4 py-5 text-xs text-slate-400 sm:px-6">
+        <span>For site administrators</span>
+        <button onclick="openLoginModal()" id="login-nav-btn" class="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500 transition hover:border-[#dce5d8] hover:text-[#345743] cursor-pointer">Admin access</button>
+        <button onclick="logoutAdmin()" id="logout-nav-btn" class="hidden rounded-full bg-rose-600 px-3 py-2 text-xs font-semibold text-white cursor-pointer">Sign out of admin</button>
+    </footer>
+
+    <div id="place-detail-backdrop" class="place-detail-backdrop" aria-hidden="true" onclick="closePlaceDetails()"></div>
+
+    <div id="visitor-auth-modal" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/45 p-4 backdrop-blur-sm" onclick="if(event.target === this) closeVisitorAuthModal()">
+        <div class="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="visitor-auth-title">
+            <button type="button" onclick="closeVisitorAuthModal()" class="absolute right-4 top-3 rounded-full px-2 py-1 text-xl text-slate-500 hover:bg-slate-100 cursor-pointer" aria-label="Close sign-in dialog">×</button>
+            <h3 id="visitor-auth-title" class="mb-1 text-lg font-bold text-slate-950">Sign in</h3>
+            <p id="visitor-auth-description" class="mb-4 text-xs text-slate-500">Sign in to sync saved places and write reviews.</p>
+            <form id="visitor-auth-form" onsubmit="submitVisitorAuth(event)" class="space-y-3">
+                <label id="visitor-username-field" class="hidden block text-xs font-semibold text-slate-600">Username
+                    <input id="visitor-username" name="username" type="text" maxlength="80" autocomplete="nickname" class="mt-1 w-full rounded-lg border border-slate-200 p-2 text-sm focus:outline-indigo-500" placeholder="How should we greet you?">
+                </label>
+                <label class="block text-xs font-semibold text-slate-600">Email
+                    <input id="visitor-email" name="email" type="email" maxlength="254" autocomplete="email" required class="mt-1 w-full rounded-lg border border-slate-200 p-2 text-sm focus:outline-indigo-500" placeholder="you@example.com">
+                </label>
+                <label class="block text-xs font-semibold text-slate-600">Password
+                    <input id="visitor-password" name="password" type="password" minlength="8" maxlength="128" autocomplete="current-password" required class="mt-1 w-full rounded-lg border border-slate-200 p-2 text-sm focus:outline-indigo-500" placeholder="At least 8 characters">
+                </label>
+                <p id="visitor-auth-status" class="hidden text-xs" role="status" aria-live="polite"></p>
+                <button id="visitor-auth-submit" type="submit" class="w-full rounded-lg bg-[#294b36] py-2.5 text-sm font-semibold text-white hover:bg-[#203d2b] cursor-pointer">Sign in</button>
+            </form>
+            <p class="mt-4 text-center text-xs text-slate-500"><span id="visitor-auth-switch-copy">New here?</span>
+                <button id="visitor-auth-switch" type="button" onclick="toggleVisitorAuthMode()" class="font-semibold text-indigo-700 underline cursor-pointer">Create an account</button>
+            </p>
+            <p class="mt-3 border-t border-slate-100 pt-3 text-center text-[10px] leading-4 text-slate-400">Email addresses are private and never appear with public reviews. Email format is checked; no verification code is sent.</p>
+        </div>
+    </div>
+
+    <!-- Admin Authentication Modal Overlay -->
+    <div id="login-modal" class="hidden fixed inset-0 bg-slate-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4" onclick="if(event.target === this) closeLoginModal()">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-slate-200 relative" role="dialog" aria-modal="true" aria-labelledby="login-title">
+            <h3 id="login-title" class="text-lg font-bold text-slate-950 mb-1">Login</h3>
+            <p class="text-xs text-slate-500 mb-4">Sign in to manage places and community reviews.</p>
+            
+            <div id="login-error-msg" class="hidden text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-lg p-2 mb-3"></div>
+
+            <form id="login-form" onsubmit="submitAdminLogin(event)" class="space-y-3">
+                <div>
+                    <label for="login-username" class="block text-xs font-semibold text-slate-600 mb-1">Username</label>
+                    <input type="text" id="login-username" autocomplete="username" required class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-indigo-500">
+                </div>
+                <div>
+                    <label for="login-password" class="block text-xs font-semibold text-slate-600 mb-1">Password</label>
+                    <input type="password" id="login-password" autocomplete="current-password" required class="w-full border border-slate-200 rounded-lg p-2 text-sm focus:outline-indigo-500">
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="closeLoginModal()" class="w-1/2 bg-slate-100 text-slate-700 py-2 rounded-lg text-sm font-semibold cursor-pointer">Cancel</button>
+                    <button id="login-submit" type="submit" class="w-1/2 bg-[#294b36] text-white py-2 rounded-lg text-sm font-semibold cursor-pointer">Login</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
