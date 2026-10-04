@@ -16,10 +16,10 @@ public class AuthController {
 
     private static final String ADMIN_TOKEN = createAdminToken();
 
-    @Value("${app.admin.username:}")
+    @Value("${app.admin.username:smriti_admin}")
     private String adminUsername;
 
-    @Value("${app.admin.password:}")
+    @Value("${app.admin.password:KathmanduSecrets2026!}")
     private String adminPassword;
 
     @PostMapping("/login")
